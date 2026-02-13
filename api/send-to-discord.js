@@ -1,10 +1,11 @@
+// api/send-to-discord.js
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
   if (req.headers.authorization !== `Bearer ${process.env.ACCESS_TOKEN}`)
     return res.status(401).end();
 
-  const { message } = await req.json();
+  const { message } = req.body || {};
   const r = await fetch(process.env.WEBHOOK_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
