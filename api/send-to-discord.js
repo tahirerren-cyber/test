@@ -14,16 +14,21 @@ export default async function handler(req, res) {
   if (auth !== `Bearer ${token}`) return res.status(401).end();
 
   const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
-  const rawMessage = body.message;
-  const content = (rawMessage ?? "").toString().trim();
-  if (!content) return res.status(400).json({ error: "empty message" });
+  const { message, content, text, msg } = body;
+  let final = [message, content, text, msg].find(v => v !== undefined && v !== null && String(v).trim().length > 0);
+  if (!final) {
+    // fallback: use whole body as string, or placeholder
+    const keys = Object.keys(body);
+    if (keys.length) final = JSON.stringify(body).slice(0, 1800);
+    else final = "(empty)";
+  }
 
   let discordRes;
   try {
     discordRes = await fetch(process.env.WEBHOOK_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content })
+      body: JSON.stringify({ content: String(final) })
     });
   } catch (err) {
     return res.status(502).json({ error: "discord fetch failed", detail: err?.message || String(err) });
