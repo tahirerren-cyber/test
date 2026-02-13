@@ -5,7 +5,8 @@ export default async function handler(req, res) {
   const auth = (req.headers.authorization || '').replace(/\s+/g, ' ').trim();
   if (auth !== `Bearer ${token}`) return res.status(401).end();
 
-  const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
+  const body =
+    typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
   const { message } = body;
 
   const r = await fetch(process.env.WEBHOOK_URL, {
