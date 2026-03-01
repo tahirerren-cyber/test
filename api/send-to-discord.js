@@ -1,5 +1,5 @@
 const lastHit = new Map();
-const WINDOW = 600000; // 5 seconds per IP
+const WINDOW = 300000;
 
 export default async function handler(req, res) {
   const corsHeaders = {
