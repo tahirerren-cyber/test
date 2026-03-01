@@ -1,0 +1,48 @@
+export default {
+  async fetch(req, env) {
+    // CORS
+    const cors = {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "POST,OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type,Authorization",
+    };
+    if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
+    if (req.method !== "POST") return new Response("method", { status: 405, headers: cors });
+
+    // IP ve rate limit (30 sn’de 3 istek)
+    const ip = req.headers.get("CF-Connecting-IP") || "unknown";
+    const windowMs = 30_000, limit = 3;
+    const now = Date.now();
+    const key = `rl:${ip}`;
+    const entry = await env.RATES.get(key, { type: "json" }) || { count: 0, reset: now + windowMs };
+    if (now < entry.reset && entry.count >= limit)
+      return new Response("rate limit", { status: 429, headers: cors });
+    const next = now < entry.reset ? { count: entry.count + 1, reset: entry.reset }
+                                   : { count: 1, reset: now + windowMs };
+    await env.RATES.put(key, JSON.stringify(next), { expiration: Math.ceil(next.reset/1000)+5 });
+
+    // Auth
+    const token = req.headers.get("Authorization") || "";
+    if (token.trim() !== `Bearer ${env.ACCESS_TOKEN}`) return new Response("auth", { status: 401, headers: cors });
+
+    // Body
+    const text = await req.text();
+    let body;
+    try { body = text ? JSON.parse(text) : {}; } catch { body = {}; }
+    const candidate = [body.message, body.content, body.text, body.msg].find(v => v && String(v).trim());
+    const finalMsg = candidate ? String(candidate) : (Object.keys(body).length ? JSON.stringify(body).slice(0,1800) : "(empty)");
+
+    // Forward to Discord
+    const discordRes = await fetch(env.WEBHOOK_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: finalMsg })
+    }).catch(err => ({ ok: false, status: 0, text: async () => err.message }));
+    if (!discordRes.ok) {
+      const errText = await discordRes.text().catch(() => "");
+      return new Response(`discord error ${discordRes.status}: ${errText}`, { status: 502, headers: cors });
+    }
+
+    return new Response("ok", { status: 200, headers: cors });
+  }
+}
