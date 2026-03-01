@@ -1,3 +1,6 @@
+const lastHit = new Map();
+const WINDOW = 600000; // 5 seconds per IP
+
 export default async function handler(req, res) {
   const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
@@ -9,6 +12,12 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(204).end();
   if (req.method !== "POST") return res.status(405).end();
 
+  const ip = (req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.socket?.remoteAddress || "unknown";
+  const now = Date.now();
+  const prev = lastHit.get(ip) || 0;
+  if (now - prev < WINDOW) return res.status(429).send("rate limit");
+  lastHit.set(ip, now);
+
   const token = (process.env.ACCESS_TOKEN || "").trim();
   const auth = (req.headers.authorization || "").replace(/\s+/g, " ").trim();
   if (auth !== `Bearer ${token}`) return res.status(401).end();
@@ -17,7 +26,6 @@ export default async function handler(req, res) {
   const { message, content, text, msg } = body;
   let final = [message, content, text, msg].find(v => v !== undefined && v !== null && String(v).trim().length > 0);
   if (!final) {
-    // fallback: use whole body as string, or placeholder
     const keys = Object.keys(body);
     if (keys.length) final = JSON.stringify(body).slice(0, 1800);
     else final = "(empty)";
